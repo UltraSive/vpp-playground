@@ -54,14 +54,16 @@ type tunnelSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type tunnelProgramSpecs struct {
-	CountPackets *ebpf.ProgramSpec `ebpf:"count_packets"`
+	TunnelRouter *ebpf.ProgramSpec `ebpf:"tunnel_router"`
 }
 
 // tunnelMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type tunnelMapSpecs struct {
-	PktCount *ebpf.MapSpec `ebpf:"pkt_count"`
+	DestinationMap *ebpf.MapSpec `ebpf:"destination_map"`
+	PktCount       *ebpf.MapSpec `ebpf:"pkt_count"`
+	TunnelMap      *ebpf.MapSpec `ebpf:"tunnel_map"`
 }
 
 // tunnelVariableSpecs contains global variables before they are loaded into the kernel.
@@ -90,12 +92,16 @@ func (o *tunnelObjects) Close() error {
 //
 // It can be passed to loadTunnelObjects or ebpf.CollectionSpec.LoadAndAssign.
 type tunnelMaps struct {
-	PktCount *ebpf.Map `ebpf:"pkt_count"`
+	DestinationMap *ebpf.Map `ebpf:"destination_map"`
+	PktCount       *ebpf.Map `ebpf:"pkt_count"`
+	TunnelMap      *ebpf.Map `ebpf:"tunnel_map"`
 }
 
 func (m *tunnelMaps) Close() error {
 	return _TunnelClose(
+		m.DestinationMap,
 		m.PktCount,
+		m.TunnelMap,
 	)
 }
 
@@ -109,12 +115,12 @@ type tunnelVariables struct {
 //
 // It can be passed to loadTunnelObjects or ebpf.CollectionSpec.LoadAndAssign.
 type tunnelPrograms struct {
-	CountPackets *ebpf.Program `ebpf:"count_packets"`
+	TunnelRouter *ebpf.Program `ebpf:"tunnel_router"`
 }
 
 func (p *tunnelPrograms) Close() error {
 	return _TunnelClose(
-		p.CountPackets,
+		p.TunnelRouter,
 	)
 }
 

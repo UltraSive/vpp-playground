@@ -24,7 +24,7 @@ func main() {
 	}
 	defer objs.Close()
 
-	ifname := "enp0s8" // Change this to an interface on your machine.
+	ifname := "enp0s9" // Change this to an interface on your machine.
 	iface, err := net.InterfaceByName(ifname)
 	if err != nil {
 		log.Fatalf("Getting interface %s: %s", ifname, err)
@@ -32,7 +32,7 @@ func main() {
 
 	// Attach count_packets to the network interface.
 	link, err := link.AttachXDP(link.XDPOptions{
-		Program:   objs.CountPackets,
+		Program:   objs.TunnelRouter,
 		Interface: iface.Index,
 	})
 	if err != nil {
