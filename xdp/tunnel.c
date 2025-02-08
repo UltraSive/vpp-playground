@@ -91,6 +91,13 @@ struct {
     __uint(max_entries, 1024);
 } tunnel_map SEC(".maps");
 
+struct {
+    __uint(type, BPF_MAP_TYPE_XSKMAP);
+    __uint(max_entries, 64); // Maximum queues for XDP sockets
+    __type(key, __u32);
+    __type(value, __u32);
+} xsks_map SEC(".maps");
+
 // count_packets atomically increases a packet counter on every invocation.
 SEC("xdp") 
 int tunnel_router(struct xdp_md *ctx) {
@@ -112,15 +119,9 @@ int tunnel_router(struct xdp_md *ctx) {
 
     __u64 now_ns = bpf_ktime_get_ns();
 
-     if (eth->h_proto == __constant_htons(ETH_P_IP))
-    {
-        //return process_ipv4(ctx, eth, now_ns);
-        return XDP_PASS;
-    }
-    else if (eth->h_proto == __constant_htons(ETH_P_IPV6))
-    {
-        // return process_ipv6(ctx, eth, now_ns);
-        return XDP_PASS;
+    __u32 rx_queue_index = ctx->rx_queue_index; // Get the RX queue index
+    if (bpf_map_lookup_elem(&xsks_map, &rx_queue_index)) {
+        return bpf_redirect_map(&xsks_map, rx_queue_index, XDP_REDIRECT);
     }
 
     return XDP_PASS; 
