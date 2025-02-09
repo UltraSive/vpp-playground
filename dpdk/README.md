@@ -1,0 +1,1 @@
+In the case the DPDK has higher performance than the VPP, we can use the DPDK to handle the traffic.
