@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  data-plane:
+    image: vpp-container
+    privileged: true
+    volumes:
+      - vpp-socket:/run/vpp
+
+  vpp-cli:
+    image: vpp-cli
+    volumes:
+      - vpp-socket:/run/vpp
+    depends_on:
+      - data-plane
+
+volumes:
+  vpp-socket:
+    driver: local
