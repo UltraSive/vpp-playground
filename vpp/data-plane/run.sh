@@ -1,1 +1,4 @@
-docker run -d --name data-plane --privileged vpp-container
+docker run -d --name data-plane \
+    --privileged \
+    -v /run/vpp/:/run/vpp/ \
+    vpp-container

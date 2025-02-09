@@ -1,0 +1,1 @@
+docker run --rm -it -v /run/vpp:/run/vpp vpp-cli bash
