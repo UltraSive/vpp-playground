@@ -46,7 +46,8 @@ api-segment {\n\
 }\n\
 \n\
 dpdk {\n\
-  no-pci\n\
+  dev 0000:00:13.0\n\
+  uio-driver uio_pci_generic\n\
 }' > /etc/vpp/startup.conf && \
     mkdir -p /var/log/vpp /run/vpp && \
     chown -R vpp:vpp /var/log/vpp /run/vpp
