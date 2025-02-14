@@ -48,7 +48,12 @@ api-segment {\n\
 dpdk {\n\
   dev 0000:00:13.0\n\
   uio-driver uio_pci_generic\n\
-}' > /etc/vpp/startup.conf && \
+}\n\
+\n\
+# Load the ICMP plugin for IPv4 and IPv6\n\
+plugin ip4-icmp.so\n\
+plugin ip6-icmp.so\n\
+' > /etc/vpp/startup.conf && \
     mkdir -p /var/log/vpp /run/vpp && \
     chown -R vpp:vpp /var/log/vpp /run/vpp
 
