@@ -1,0 +1,27 @@
+{
+  "interfaces": [
+    {
+      "index": 1,
+      "mac": "bc:24:11:2c:bd:9a",
+      "mtu": 1500,
+      "ip_addrs": ["172.93.110.120/24"],
+      "status": true
+    }
+  ],
+  "tunnels": [
+    {
+      "type": "gre",
+      "source": "172.93.110.120",
+      "destination": "45.76.233.197",
+      "ip_addrs": ["10.10.10.1/30"],
+      "status": true
+    }
+  ],
+  "routes": [
+    {
+      "destination": "103.195.102.92/24",
+      "next_hop": "10.10.10.2",
+      "interface": "gre0"
+    }
+  ]
+}
