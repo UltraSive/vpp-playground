@@ -33,6 +33,7 @@ import (
 	"go.fd.io/govpp/binapi/vpe"
 	"go.fd.io/govpp/core"
 	"go.fd.io/govpp/binapi/gre"
+	"go.fd.io/govpp/binapi/fib_types"
 )
 
 var (
@@ -90,7 +91,7 @@ func main() {
 	addIPAddress(ch, idx)
 	listIPaddresses(ch, idx)
 	//watchInterfaceEvents(ch, idx)
-	//addIPRoute(ch, "0.0.0.0/0", "172.93.110.1")
+	addIPRoute(ch, "0.0.0.0/0", "172.93.110.1")
 	setInterfaceStatus(ch, idx, true)
 
 	// Set MTU for interface
@@ -115,9 +116,9 @@ func main() {
 	setInterfaceStatus(ch, tunnelIdx, true)
 
 	// Add route through the GRE tunnel
-	/*if err := addIPRouteViaInterface(ch, "103.195.102.92/24", "10.10.10.2", tunnelIdx); err != nil {
+	if err := addIPRouteViaInterface(ch, "103.195.102.92/24", "10.10.10.2", tunnelIdx); err != nil {
 		logError(err, "adding route via GRE tunnel")
-	}*/
+	}
 }
 
 func getVppVersion(ch api.Channel) {
@@ -251,7 +252,7 @@ func logError(err error, msg string) {
 	fmt.Printf("ERROR: %s: %v\n", msg, err)
 	errors = append(errors, err)
 }
-/*
+
 func addIPRoute(ch api.Channel, dstAddr string, nextHopAddr string) {
 	// Parse the destination CIDR
 	_, dst, err := net.ParseCIDR(dstAddr)
@@ -269,12 +270,16 @@ func addIPRoute(ch api.Channel, dstAddr string, nextHopAddr string) {
 
 	ones, _ := dst.Mask.Size()
 
-	// Create route path
-	path := ip_types.FibPath{
-		SwIfIndex: ^uint32(0),
-		NextHop:   toAddress(nextHop),
-		Proto:     ip_types.ADDRESS_IP4,
+	// Create route path using fib_types.FibPath
+	path := fib_types.FibPath{
+		SwIfIndex: ^uint32(0), // Use default interface index
+		Proto:     fib_types.FibPathNhProto(ip_types.ADDRESS_IP4),
 		Weight:    1,
+		Nh: fib_types.FibPathNh{
+			Address: ip_types.AddressUnion{
+				XXX_UnionData: toAddress(nextHop).Un.XXX_UnionData,
+			},
+		},
 	}
 
 	// Prepare route add request
@@ -286,7 +291,7 @@ func addIPRoute(ch api.Channel, dstAddr string, nextHopAddr string) {
 				Len:     uint8(ones),
 			},
 			NPaths: 1,
-			Paths:  []ip_types.FibPath{path},
+			Paths:  []fib_types.FibPath{path},
 		},
 	}
 
@@ -299,7 +304,7 @@ func addIPRoute(ch api.Channel, dstAddr string, nextHopAddr string) {
 
 	fmt.Printf("Route added successfully: %s via %s\n", dstAddr, nextHopAddr)
 }
-*/
+
 func createGRETunnel(ch api.Channel, srcAddr, dstAddr string) (interface_types.InterfaceIndex, error) {
 	// Parse source and destination IP addresses
 	src := net.ParseIP(srcAddr)
@@ -375,7 +380,7 @@ func setInterfaceMTU(ch api.Channel, ifIdx interface_types.InterfaceIndex, mtu u
 	fmt.Printf("MTU set successfully: %d for interface %d\n", mtu, ifIdx)
 	return nil
 }
-/*
+
 func addIPRouteViaInterface(ch api.Channel, dstAddr string, nextHopAddr string, ifIdx interface_types.InterfaceIndex) error {
 	// Parse the destination CIDR
 	_, dst, err := net.ParseCIDR(dstAddr)
@@ -391,12 +396,16 @@ func addIPRouteViaInterface(ch api.Channel, dstAddr string, nextHopAddr string, 
 
 	ones, _ := dst.Mask.Size()
 
-	// Create route path
-	path := ip_types.FibPath{
+	// Create route path using fib_types.FibPath
+	path := fib_types.FibPath{
 		SwIfIndex: uint32(ifIdx),
-		NextHop:   toAddress(nextHop),
-		Proto:     ip_types.ADDRESS_IP4,
+		Proto:     fib_types.FibPathNhProto(ip_types.ADDRESS_IP4),
 		Weight:    1,
+		Nh: fib_types.FibPathNh{
+			Address: ip_types.AddressUnion{
+				XXX_UnionData: toAddress(nextHop).Un.XXX_UnionData,
+			},
+		},
 	}
 
 	// Prepare route add request
@@ -408,7 +417,7 @@ func addIPRouteViaInterface(ch api.Channel, dstAddr string, nextHopAddr string, 
 				Len:     uint8(ones),
 			},
 			NPaths: 1,
-			Paths:  []ip_types.FibPath{path},
+			Paths:  []fib_types.FibPath{path},
 		},
 	}
 
@@ -422,7 +431,7 @@ func addIPRouteViaInterface(ch api.Channel, dstAddr string, nextHopAddr string, 
 		dstAddr, nextHopAddr, ifIdx)
 	return nil
 }
-*/
+
 func addInterfaceIPAddress(ch api.Channel, ifIdx interface_types.InterfaceIndex, ipAddr string) error {
 	// Parse the IP address with subnet
 	ip, ipNet, err := net.ParseCIDR(ipAddr)
@@ -458,12 +467,16 @@ func toAddress(ip net.IP) ip_types.Address {
 		var ip4Addr [4]uint8
 		copy(ip4Addr[:], ip4)
 		addr.Af = ip_types.ADDRESS_IP4
-		addr.Un.SetIP4(ip4Addr)
+		addr.Un.XXX_UnionData = ip_types.AddressUnion{
+			XXX_UnionData: [16]byte{ip4Addr[0], ip4Addr[1], ip4Addr[2], ip4Addr[3]},
+		}.XXX_UnionData
 	} else {
 		var ip6Addr [16]uint8
 		copy(ip6Addr[:], ip)
 		addr.Af = ip_types.ADDRESS_IP6
-		addr.Un.SetIP6(ip6Addr)
+		addr.Un.XXX_UnionData = ip_types.AddressUnion{
+			XXX_UnionData: [16]byte(ip6Addr),
+		}.XXX_UnionData
 	}
 	return addr
 }
