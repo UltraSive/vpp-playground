@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
-	"sync"
 
 	"go.fd.io/govpp"
 	"go.fd.io/govpp/adapter/socketclient"
@@ -34,6 +32,7 @@ import (
 	"go.fd.io/govpp/binapi/ip_types"
 	"go.fd.io/govpp/binapi/vpe"
 	"go.fd.io/govpp/core"
+	"go.fd.io/govpp/binapi/gre"
 )
 
 var (
@@ -82,11 +81,43 @@ func main() {
 	getVppVersion(ch)
 	getSystemTime(ch)
 	//idx := createLoopback(ch)
-	idx := 1
+	var idx interface_types.InterfaceIndex = 1 // interface index with correct type
 	listInterfaces(ch)
+	// Set MAC address for interface
+	if err := setInterfaceMAC(ch, idx, "bc:24:11:2c:bd:9a"); err != nil {
+		logError(err, "setting MAC address")
+	}
 	addIPAddress(ch, idx)
 	listIPaddresses(ch, idx)
 	//watchInterfaceEvents(ch, idx)
+	//addIPRoute(ch, "0.0.0.0/0", "172.93.110.1")
+	setInterfaceStatus(ch, idx, true)
+
+	// Set MTU for interface
+	if err := setInterfaceMTU(ch, idx, 1500); err != nil {
+		logError(err, "setting MTU")
+	}
+
+	// Create GRE tunnel
+	tunnelIdx, err := createGRETunnel(ch, "172.93.110.120", "45.76.233.197")
+	if err != nil {
+		logError(err, "creating GRE tunnel")
+		return
+	}
+
+	// Add IP address to the tunnel interface
+	if err := addInterfaceIPAddress(ch, tunnelIdx, "10.10.10.1/30"); err != nil {
+		logError(err, "adding IP address to tunnel")
+		return
+	}
+
+	// Bring the tunnel interface up
+	setInterfaceStatus(ch, tunnelIdx, true)
+
+	// Add route through the GRE tunnel
+	/*if err := addIPRouteViaInterface(ch, "103.195.102.92/24", "10.10.10.2", tunnelIdx); err != nil {
+		logError(err, "adding route via GRE tunnel")
+	}*/
 }
 
 func getVppVersion(ch api.Channel) {
@@ -185,72 +216,6 @@ func listIPaddresses(ch api.Channel, index interface_types.InterfaceIndex) {
 	}
 }
 
-// watchInterfaceEvents shows the usage of notification API. Note that for notifications,
-// you are supposed to create your own Go channel with your preferred buffer size. If the channel's
-// buffer is full, the notifications will not be delivered into it.
-func watchInterfaceEvents(ch api.Channel, index interface_types.InterfaceIndex) {
-	notifChan := make(chan api.Message, 100)
-
-	// subscribe for specific event message
-	sub, err := ch.SubscribeNotification(notifChan, &interfaces.SwInterfaceEvent{})
-	if err != nil {
-		logError(err, "subscribing to interface events")
-		return
-	}
-
-	// enable interface events in VPP
-	err = ch.SendRequest(&interfaces.WantInterfaceEvents{
-		PID:           uint32(os.Getpid()),
-		EnableDisable: 1,
-	}).ReceiveReply(&interfaces.WantInterfaceEventsReply{})
-	if err != nil {
-		logError(err, "enabling interface events")
-		return
-	}
-
-	fmt.Printf("subscribed to interface events for index %d\n", index)
-
-	var wg sync.WaitGroup
-
-	// receive notifications
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for notif := range notifChan {
-			e := notif.(*interfaces.SwInterfaceEvent)
-			fmt.Printf("incoming interface event: %+v\n", e)
-			marshal(e)
-		}
-		fmt.Println("watcher done")
-	}()
-
-	// generate some events in VPP
-	setInterfaceStatus(ch, index, true)
-	setInterfaceStatus(ch, index, false)
-
-	// disable interface events in VPP
-	err = ch.SendRequest(&interfaces.WantInterfaceEvents{
-		PID:           uint32(os.Getpid()),
-		EnableDisable: 0,
-	}).ReceiveReply(&interfaces.WantInterfaceEventsReply{})
-	if err != nil {
-		logError(err, "disabling interface events")
-		return
-	}
-
-	// unsubscribe from receiving events
-	err = sub.Unsubscribe()
-	if err != nil {
-		logError(err, "unsubscribing from interface events")
-		return
-	}
-
-	// generate ignored events in VPP
-	setInterfaceStatus(ch, index, true)
-
-	wg.Wait()
-}
-
 func setInterfaceStatus(ch api.Channel, ifIdx interface_types.InterfaceIndex, up bool) {
 	var flags interface_types.IfStatusFlags
 	if up {
@@ -285,4 +250,220 @@ var errors []error
 func logError(err error, msg string) {
 	fmt.Printf("ERROR: %s: %v\n", msg, err)
 	errors = append(errors, err)
+}
+/*
+func addIPRoute(ch api.Channel, dstAddr string, nextHopAddr string) {
+	// Parse the destination CIDR
+	_, dst, err := net.ParseCIDR(dstAddr)
+	if err != nil {
+		logError(err, "parsing destination CIDR")
+		return
+	}
+
+	// Parse the next hop address
+	nextHop := net.ParseIP(nextHopAddr)
+	if nextHop == nil {
+		logError(fmt.Errorf("invalid next hop address"), "parsing next hop address")
+		return
+	}
+
+	ones, _ := dst.Mask.Size()
+
+	// Create route path
+	path := ip_types.FibPath{
+		SwIfIndex: ^uint32(0),
+		NextHop:   toAddress(nextHop),
+		Proto:     ip_types.ADDRESS_IP4,
+		Weight:    1,
+	}
+
+	// Prepare route add request
+	req := &ip.IPRouteAddDel{
+		IsAdd: true,
+		Route: ip.IPRoute{
+			Prefix: ip_types.Prefix{
+				Address: toAddress(dst.IP),
+				Len:     uint8(ones),
+			},
+			NPaths: 1,
+			Paths:  []ip_types.FibPath{path},
+		},
+	}
+
+	// Send the request
+	reply := &ip.IPRouteAddDelReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		logError(err, "adding IP route")
+		return
+	}
+
+	fmt.Printf("Route added successfully: %s via %s\n", dstAddr, nextHopAddr)
+}
+*/
+func createGRETunnel(ch api.Channel, srcAddr, dstAddr string) (interface_types.InterfaceIndex, error) {
+	// Parse source and destination IP addresses
+	src := net.ParseIP(srcAddr)
+	if src == nil {
+		return 0, fmt.Errorf("invalid source address: %s", srcAddr)
+	}
+	dst := net.ParseIP(dstAddr)
+	if dst == nil {
+		return 0, fmt.Errorf("invalid destination address: %s", dstAddr)
+	}
+
+	// Create GRE tunnel request
+	req := &gre.GreTunnelAddDel{
+		IsAdd: true,
+		Tunnel: gre.GreTunnel{
+			Src:      toAddress(src),
+			Dst:      toAddress(dst),
+			Instance: ^uint32(0), // Default instance
+		},
+	}
+
+	reply := &gre.GreTunnelAddDelReply{}
+
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return 0, fmt.Errorf("failed to create GRE tunnel: %v", err)
+	}
+
+	fmt.Printf("GRE tunnel created successfully: src %s dst %s (SwIfIndex: %d)\n", 
+		srcAddr, dstAddr, reply.SwIfIndex)
+
+	return reply.SwIfIndex, nil
+}
+
+func setInterfaceMAC(ch api.Channel, ifIdx interface_types.InterfaceIndex, macAddr string) error {
+	// Parse MAC address
+	hwAddr, err := net.ParseMAC(macAddr)
+	if err != nil {
+		return fmt.Errorf("invalid MAC address %s: %v", macAddr, err)
+	}
+
+	// Convert MAC address to VPP format
+	var vppHwAddr [6]uint8
+	copy(vppHwAddr[:], hwAddr)
+
+	// Create request to set MAC address
+	req := &interfaces.SwInterfaceSetMacAddress{
+		SwIfIndex:  ifIdx,
+		MacAddress: vppHwAddr,
+	}
+
+	reply := &interfaces.SwInterfaceSetMacAddressReply{}
+
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("failed to set MAC address: %v", err)
+	}
+
+	fmt.Printf("MAC address set successfully: %s for interface %d\n", macAddr, ifIdx)
+	return nil
+}
+
+func setInterfaceMTU(ch api.Channel, ifIdx interface_types.InterfaceIndex, mtu uint32) error {
+	req := &interfaces.SwInterfaceSetMtu{
+		SwIfIndex: ifIdx,
+		Mtu:       []uint32{mtu}, // MTU as slice for newer VPP versions
+	}
+
+	reply := &interfaces.SwInterfaceSetMtuReply{}
+
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("failed to set MTU: %v", err)
+	}
+
+	fmt.Printf("MTU set successfully: %d for interface %d\n", mtu, ifIdx)
+	return nil
+}
+/*
+func addIPRouteViaInterface(ch api.Channel, dstAddr string, nextHopAddr string, ifIdx interface_types.InterfaceIndex) error {
+	// Parse the destination CIDR
+	_, dst, err := net.ParseCIDR(dstAddr)
+	if err != nil {
+		return fmt.Errorf("parsing destination CIDR: %v", err)
+	}
+
+	// Parse the next hop address
+	nextHop := net.ParseIP(nextHopAddr)
+	if nextHop == nil {
+		return fmt.Errorf("invalid next hop address: %s", nextHopAddr)
+	}
+
+	ones, _ := dst.Mask.Size()
+
+	// Create route path
+	path := ip_types.FibPath{
+		SwIfIndex: uint32(ifIdx),
+		NextHop:   toAddress(nextHop),
+		Proto:     ip_types.ADDRESS_IP4,
+		Weight:    1,
+	}
+
+	// Prepare route add request
+	req := &ip.IPRouteAddDel{
+		IsAdd: true,
+		Route: ip.IPRoute{
+			Prefix: ip_types.Prefix{
+				Address: toAddress(dst.IP),
+				Len:     uint8(ones),
+			},
+			NPaths: 1,
+			Paths:  []ip_types.FibPath{path},
+		},
+	}
+
+	// Send the request
+	reply := &ip.IPRouteAddDelReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("failed to add IP route: %v", err)
+	}
+
+	fmt.Printf("Route added successfully: %s via %s through interface %d\n", 
+		dstAddr, nextHopAddr, ifIdx)
+	return nil
+}
+*/
+func addInterfaceIPAddress(ch api.Channel, ifIdx interface_types.InterfaceIndex, ipAddr string) error {
+	// Parse the IP address with subnet
+	ip, ipNet, err := net.ParseCIDR(ipAddr)
+	if err != nil {
+		return fmt.Errorf("invalid IP address or subnet: %v", err)
+	}
+
+	// Calculate the prefix length
+	ones, _ := ipNet.Mask.Size()
+
+	req := &interfaces.SwInterfaceAddDelAddress{
+		SwIfIndex: ifIdx,
+		IsAdd:     true,
+		Prefix: ip_types.AddressWithPrefix{
+			Address: toAddress(ip),
+			Len:     uint8(ones),
+		},
+	}
+
+	reply := &interfaces.SwInterfaceAddDelAddressReply{}
+
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("failed to add IP address: %v", err)
+	}
+
+	fmt.Printf("IP address %s added to interface %d\n", ipAddr, ifIdx)
+	return nil
+}
+
+func toAddress(ip net.IP) ip_types.Address {
+	var addr ip_types.Address
+	if ip4 := ip.To4(); ip4 != nil {
+		var ip4Addr [4]uint8
+		copy(ip4Addr[:], ip4)
+		addr.Af = ip_types.ADDRESS_IP4
+		addr.Un.SetIP4(ip4Addr)
+	} else {
+		var ip6Addr [16]uint8
+		copy(ip6Addr[:], ip)
+		addr.Af = ip_types.ADDRESS_IP6
+		addr.Un.SetIP6(ip6Addr)
+	}
+	return addr
 }
