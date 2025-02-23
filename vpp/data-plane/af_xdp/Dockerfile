@@ -23,7 +23,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt update && \
     groupadd -r vpp && \
     useradd -r -g vpp vpp && \
     DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends \
-    vpp vpp-plugin-core vpp-plugin-dpdk || true && \
+    vpp vpp-plugin-core vpp-plugin-af_xdp || true && \
     rm -f /etc/sysctl.d/80-vpp.conf
 
 # Create necessary directories
