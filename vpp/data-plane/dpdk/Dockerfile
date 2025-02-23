@@ -13,7 +13,7 @@ RUN curl -fsSL https://packagecloud.io/fdio/release/gpgkey | gpg --dearmor -o /u
 RUN echo "deb [signed-by=/usr/share/keyrings/fdio-archive-keyring.gpg] https://packagecloud.io/fdio/release/debian $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/fdio.list
 
 # Ensure dependencies are installed first
-RUN apt update && apt install -y procps
+RUN apt update && apt install -y procps net-tools
 
 # Install VPP and necessary plugins
 RUN DEBIAN_FRONTEND=noninteractive apt update && \
