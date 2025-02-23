@@ -121,7 +121,7 @@ int tunnel_router(struct xdp_md *ctx) {
 
     __u32 rx_queue_index = ctx->rx_queue_index; // Get the RX queue index
     if (bpf_map_lookup_elem(&xsks_map, &rx_queue_index)) {
-        return bpf_redirect_map(&xsks_map, rx_queue_index, XDP_REDIRECT);
+        return bpf_redirect_map(&xsks_map, ctx->rx_queue_index, XDP_REDIRECT);
     }
 
     return XDP_PASS; 

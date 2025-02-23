@@ -64,6 +64,7 @@ type tunnelMapSpecs struct {
 	DestinationMap *ebpf.MapSpec `ebpf:"destination_map"`
 	PktCount       *ebpf.MapSpec `ebpf:"pkt_count"`
 	TunnelMap      *ebpf.MapSpec `ebpf:"tunnel_map"`
+	XsksMap        *ebpf.MapSpec `ebpf:"xsks_map"`
 }
 
 // tunnelVariableSpecs contains global variables before they are loaded into the kernel.
@@ -95,6 +96,7 @@ type tunnelMaps struct {
 	DestinationMap *ebpf.Map `ebpf:"destination_map"`
 	PktCount       *ebpf.Map `ebpf:"pkt_count"`
 	TunnelMap      *ebpf.Map `ebpf:"tunnel_map"`
+	XsksMap        *ebpf.Map `ebpf:"xsks_map"`
 }
 
 func (m *tunnelMaps) Close() error {
@@ -102,6 +104,7 @@ func (m *tunnelMaps) Close() error {
 		m.DestinationMap,
 		m.PktCount,
 		m.TunnelMap,
+		m.XsksMap,
 	)
 }
 

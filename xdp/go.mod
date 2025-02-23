@@ -1,4 +1,4 @@
-module ebpf-test
+module xdp-firewall
 
 go 1.22.2
 
