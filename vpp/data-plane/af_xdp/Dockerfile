@@ -13,7 +13,7 @@ RUN curl -fsSL https://packagecloud.io/fdio/release/gpgkey | gpg --dearmor -o /u
 RUN echo "deb [signed-by=/usr/share/keyrings/fdio-archive-keyring.gpg] https://packagecloud.io/fdio/release/debian $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/fdio.list
 
 # Ensure dependencies are installed first
-RUN apt update && apt install -y procps net-tools
+RUN apt update && apt install -y procps net-tools iproute2
 
 # Install VPP and necessary plugins
 RUN DEBIAN_FRONTEND=noninteractive apt update && \
@@ -27,11 +27,14 @@ RUN DEBIAN_FRONTEND=noninteractive apt update && \
     rm -f /etc/sysctl.d/80-vpp.conf
 
 # Create necessary directories
-RUN mkdir -p /etc/vpp /var/log/vpp /run/vpp && \
-    chown -R vpp:vpp /var/log/vpp /run/vpp
+RUN mkdir -p /etc/vpp /var/log/vpp /run/vpp /extras/bpf && \
+    chown -R vpp:vpp /var/log/vpp /run/vpp /extras/bpf
 
 # Copy the VPP startup configuration file
 COPY startup.conf /etc/vpp/startup.conf
+
+# Copy the custom XDP BPF program to the extras/bpf directory
+COPY af_xdp.bpfel.o /extras/bpf/af_xdp.bpfel.o
 
 # Default command to start VPP
 CMD ["/usr/bin/vpp", "-c", "/etc/vpp/startup.conf"]

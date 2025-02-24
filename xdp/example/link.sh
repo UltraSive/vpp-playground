@@ -1,0 +1,1 @@
+ip link set dev ens20 xdp obj af_xdp.bpfel.o
