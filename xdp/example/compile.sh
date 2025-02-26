@@ -1,1 +1,1 @@
-clang -O2 -target bpf -g -c tunnel.c -o af_xdp.bpfel.o
+clang -O2 -target bpf -g -c af_xdp.bpf.c -o af_xdp.bpfel.o

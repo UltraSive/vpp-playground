@@ -34,7 +34,7 @@ RUN mkdir -p /etc/vpp /var/log/vpp /run/vpp /extras/bpf && \
 COPY startup.conf /etc/vpp/startup.conf
 
 # Copy the custom XDP BPF program to the extras/bpf directory
-COPY af_xdp.bpfel.o /extras/bpf/af_xdp.bpfel.o
+COPY af_xdp.bpf.o /extras/bpf/af_xdp.bpf.o
 
 # Default command to start VPP
 CMD ["/usr/bin/vpp", "-c", "/etc/vpp/startup.conf"]
