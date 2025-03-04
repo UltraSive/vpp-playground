@@ -61,10 +61,12 @@ type tunnelProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type tunnelMapSpecs struct {
-	DestinationMap *ebpf.MapSpec `ebpf:"destination_map"`
-	PktCount       *ebpf.MapSpec `ebpf:"pkt_count"`
-	TunnelMap      *ebpf.MapSpec `ebpf:"tunnel_map"`
-	XsksMap        *ebpf.MapSpec `ebpf:"xsks_map"`
+	Ipv4ConnectionMap  *ebpf.MapSpec `ebpf:"ipv4_connection_map"`
+	Ipv4DestinationMap *ebpf.MapSpec `ebpf:"ipv4_destination_map"`
+	Ipv4PunchMap       *ebpf.MapSpec `ebpf:"ipv4_punch_map"`
+	PktCount           *ebpf.MapSpec `ebpf:"pkt_count"`
+	TunnelMap          *ebpf.MapSpec `ebpf:"tunnel_map"`
+	XsksMap            *ebpf.MapSpec `ebpf:"xsks_map"`
 }
 
 // tunnelVariableSpecs contains global variables before they are loaded into the kernel.
@@ -93,15 +95,19 @@ func (o *tunnelObjects) Close() error {
 //
 // It can be passed to loadTunnelObjects or ebpf.CollectionSpec.LoadAndAssign.
 type tunnelMaps struct {
-	DestinationMap *ebpf.Map `ebpf:"destination_map"`
-	PktCount       *ebpf.Map `ebpf:"pkt_count"`
-	TunnelMap      *ebpf.Map `ebpf:"tunnel_map"`
-	XsksMap        *ebpf.Map `ebpf:"xsks_map"`
+	Ipv4ConnectionMap  *ebpf.Map `ebpf:"ipv4_connection_map"`
+	Ipv4DestinationMap *ebpf.Map `ebpf:"ipv4_destination_map"`
+	Ipv4PunchMap       *ebpf.Map `ebpf:"ipv4_punch_map"`
+	PktCount           *ebpf.Map `ebpf:"pkt_count"`
+	TunnelMap          *ebpf.Map `ebpf:"tunnel_map"`
+	XsksMap            *ebpf.Map `ebpf:"xsks_map"`
 }
 
 func (m *tunnelMaps) Close() error {
 	return _TunnelClose(
-		m.DestinationMap,
+		m.Ipv4ConnectionMap,
+		m.Ipv4DestinationMap,
+		m.Ipv4PunchMap,
 		m.PktCount,
 		m.TunnelMap,
 		m.XsksMap,

@@ -1,10 +1,10 @@
 
-// go:build ignore
+//go:build ignore
 
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h> // Keep this
 // #include <linux/types.h>
-#include <xdp/xdp_helpers.h> // Extra
+// #include <xdp/xdp_helpers.h> // Extra
 /*
  // Extra
 #include <linux/bpf.h>
@@ -15,8 +15,8 @@
 #include <linux/udp.h>
 */
 
-#define XDP_METADATA_SECTION "xdp_metadata"
-#define XSK_PROG_VERSION 1
+/*#define XDP_METADATA_SECTION "xdp_metadata"
+#define XSK_PROG_VERSION 1*/
 
 #define IP_PROTO_TCP 6
 #define IP_PROTO_UDP 17
@@ -71,7 +71,8 @@ struct {
 enum dst_usage
 {
     LOCAL_MACHINE,
-    DEST_TUNNEL,
+    TUNNEL_HOST,    // Used for our Anycast GRE endpoint
+    TUNNEL_FORWARD, // Addresses we forward through the tunnel
     FACILITY
 };
 
@@ -156,11 +157,27 @@ struct
     __type(value, __u32);
 } xsks_map SEC(".maps");
 
-struct
+/*struct
 {
     __uint(priority, 10);
     __uint(XDP_PASS, 1);
-} XDP_RUN_CONFIG(xdp_sock_prog);
+} XDP_RUN_CONFIG(xdp_sock_prog);*/
+
+static __always_inline int determine_xdp_action(struct xdp_md *ctx, enum dst_usage usage)
+{
+    if (usage == LOCAL_MACHINE)
+    {
+        return XDP_PASS;
+    }
+
+    __u32 rx_queue_index = ctx->rx_queue_index;
+    if (bpf_map_lookup_elem(&xsks_map, &rx_queue_index))
+    {
+        return bpf_redirect_map(&xsks_map, rx_queue_index, XDP_REDIRECT);
+    }
+
+    return XDP_PASS;
+}
 
 // count_packets atomically increases a packet counter on every invocation.
 SEC("xdp")
@@ -174,6 +191,7 @@ int xdp_sock_prog(struct xdp_md *ctx)
         __sync_fetch_and_add(count, 1);
     }
     /* END COUNT PACKET */
+    __u64 now_ns = bpf_ktime_get_ns();
 
     void *data_end = (void *)(long)ctx->data_end;
     void *data = (void *)(long)ctx->data;
@@ -182,16 +200,65 @@ int xdp_sock_prog(struct xdp_md *ctx)
     if ((void *)(eth + 1) > data_end)
         return XDP_PASS;
 
-    __u64 now_ns = bpf_ktime_get_ns();
-
-    __u32 rx_queue_index = ctx->rx_queue_index; // Get the RX queue index
-    if (bpf_map_lookup_elem(&xsks_map, &rx_queue_index))
+    __u16 eth_proto = __builtin_bswap16(eth->h_proto);
+    switch (eth_proto)
     {
-        return bpf_redirect_map(&xsks_map, ctx->rx_queue_index, XDP_REDIRECT);
+    case ETH_P_IP:
+    {
+        struct iphdr *ip = data + sizeof(*eth);
+        if ((void *)(ip + 1) > data_end)
+            return XDP_PASS;
+
+        __u32 dest_ip = __builtin_bswap32(ip->daddr);
+        __u32 src_ip = __builtin_bswap32(ip->saddr);
+
+        struct destination_info *dest_info = bpf_map_lookup_elem(&ipv4_destination_map, &dest_ip);
+        if (dest_info)
+        {
+            const char *usage_str;
+            switch (dest_info->usage)
+            {
+            case LOCAL_MACHINE:
+                usage_str = "LOCAL_MACHINE";
+                break;
+            case TUNNEL_HOST:
+                usage_str = "TUNNEL_HOST";
+                break;
+            case TUNNEL_FORWARD:
+                usage_str = "TUNNEL_FORWARD";
+                break;
+            case FACILITY:
+                usage_str = "FACILITY";
+                break;
+            default:
+                usage_str = "UNKNOWN";
+                break;
+            }
+
+            bpf_printk("Dest usage: %s", usage_str);
+            return determine_xdp_action(ctx, dest_info->usage);
+        }
+
+        bpf_printk("Not found in map: %d.%d.%d.%d",
+                   (dest_ip >> 24) & 0xFF,
+                   (dest_ip >> 16) & 0xFF,
+                   (dest_ip >> 8) & 0xFF,
+                   dest_ip & 0xFF);
+        break;
+    }
+    case ETH_P_IPV6:
+    {
+        struct ipv6hdr *ip6 = data + sizeof(*eth);
+        if ((void *)(ip6 + 1) > data_end)
+            return XDP_PASS;
+        break; // We do not support ipv6 yet
+    }
+    default:
+        return XDP_PASS;
     }
 
     return XDP_PASS;
 }
 
 char __license[] SEC("license") = "Dual MIT/GPL";
-__uint(xsk_prog_version, XSK_PROG_VERSION) SEC(XDP_METADATA_SECTION);
+/*__uint(xsk_prog_version, XSK_PROG_VERSION) SEC(XDP_METADATA_SECTION);*/
