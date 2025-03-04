@@ -68,6 +68,13 @@ struct {
 } source_map SEC(".maps");
 */
 
+enum action
+{
+    ALLOW,
+    BLOCK,
+    RATELIMIT
+};
+
 enum dst_usage
 {
     LOCAL_MACHINE,
@@ -79,7 +86,7 @@ enum dst_usage
 struct destination_info
 {
     enum dst_usage usage;
-    __u8 default_action; // 0 = block; 1 = allow
+    enum action default_action; // 0 = block; 1 = allow
     __u32 rx_bytes;
     __u32 rx_pkts;
     __u32 tx_bytes;
@@ -93,13 +100,6 @@ struct
     __type(value, sizeof(struct destination_info));
     __uint(max_entries, 1024);
 } ipv4_destination_map SEC(".maps");
-
-enum action
-{
-    ALLOW,
-    BLOCK,
-    RATELIMIT
-};
 
 struct ipv4_five_tuple
 {
@@ -176,7 +176,8 @@ static __always_inline int determine_xdp_action(struct xdp_md *ctx, enum dst_usa
         return bpf_redirect_map(&xsks_map, rx_queue_index, XDP_REDIRECT);
     }
 
-    return XDP_PASS;
+    bpf_printk("Could not send to af_xdp socket");
+    return XDP_DROP;
 }
 
 // count_packets atomically increases a packet counter on every invocation.
@@ -235,7 +236,11 @@ int xdp_sock_prog(struct xdp_md *ctx)
                 break;
             }
 
-            bpf_printk("Dest usage: %s", usage_str);
+            bpf_printk("%d.%d.%d.%d usage: %s", (dest_ip >> 24) & 0xFF,
+                       (dest_ip >> 16) & 0xFF,
+                       (dest_ip >> 8) & 0xFF,
+                       dest_ip & 0xFF,
+                       usage_str);
             return determine_xdp_action(ctx, dest_info->usage);
         }
 
