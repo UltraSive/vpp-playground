@@ -210,7 +210,7 @@ int xdp_sock_prog(struct xdp_md *ctx)
         if ((void *)(ip + 1) > data_end)
             return XDP_PASS;
 
-        __u32 dest_ip = __builtin_bswap32(ip->daddr);
+        __u32 dst_ip = __builtin_bswap32(ip->daddr);
         __u32 src_ip = __builtin_bswap32(ip->saddr);
 
         __u16 src_port = 0;
@@ -259,7 +259,7 @@ int xdp_sock_prog(struct xdp_md *ctx)
             return XDP_PASS;
         }
 
-        struct destination_info *dest_info = bpf_map_lookup_elem(&ipv4_destination_map, &dest_ip);
+        struct destination_info *dest_info = bpf_map_lookup_elem(&ipv4_destination_map, &dst_ip);
         if (dest_info)
         {
             const char *usage_str;
@@ -282,19 +282,19 @@ int xdp_sock_prog(struct xdp_md *ctx)
                 break;
             }
 
-            bpf_printk("%d.%d.%d.%d usage: %s", (dest_ip >> 24) & 0xFF,
-                       (dest_ip >> 16) & 0xFF,
-                       (dest_ip >> 8) & 0xFF,
-                       dest_ip & 0xFF,
+            bpf_printk("%d.%d.%d.%d usage: %s", (dst_ip >> 24) & 0xFF,
+                       (dst_ip >> 16) & 0xFF,
+                       (dst_ip >> 8) & 0xFF,
+                       dst_ip & 0xFF,
                        usage_str);
             return determine_xdp_action(ctx, dest_info->usage);
         }
 
         bpf_printk("Not found in map: %d.%d.%d.%d",
-                   (dest_ip >> 24) & 0xFF,
-                   (dest_ip >> 16) & 0xFF,
-                   (dest_ip >> 8) & 0xFF,
-                   dest_ip & 0xFF);
+                   (dst_ip >> 24) & 0xFF,
+                   (dst_ip >> 16) & 0xFF,
+                   (dst_ip >> 8) & 0xFF,
+                   dst_ip & 0xFF);
         break;
     }
     case ETH_P_IPV6:
