@@ -133,9 +133,9 @@ struct
 
 struct tunnel
 {
-    struct address local_ip;
+    __u32 local_ip;
     __u16 local_port;
-    struct address remote_ip;
+    __u32 remote_ip;
     __u16 remote_port;
 };
 
@@ -212,6 +212,52 @@ int xdp_sock_prog(struct xdp_md *ctx)
 
         __u32 dest_ip = __builtin_bswap32(ip->daddr);
         __u32 src_ip = __builtin_bswap32(ip->saddr);
+
+        __u16 src_port = 0;
+        __u16 dst_port = 0;
+
+        switch (ip->protocol)
+        {
+        case IPPROTO_TCP:
+        {
+            struct tcphdr *tcp = data + sizeof(*eth) + sizeof(*ip);
+            if ((void *)(tcp + 1) > data_end)
+                return XDP_PASS;
+
+            src_port = __builtin_bswap16(tcp->source);
+            dst_port = __builtin_bswap16(tcp->dest);
+            bpf_printk("TCP packet port: %u\n", dst_port);
+            break;
+        }
+        case IPPROTO_UDP:
+        {
+            struct udphdr *udp = data + sizeof(*eth) + sizeof(*ip);
+            if ((void *)(udp + 1) > data_end)
+                return XDP_PASS;
+
+            src_port = __builtin_bswap16(udp->source);
+            dst_port = __builtin_bswap16(udp->dest);
+            bpf_printk("UDP packet port: %u\n", dst_port);
+            break;
+        }
+        case IPPROTO_GRE:
+        {
+            // GRE packets usually don't have src/dst ports, but you can inspect the GRE header
+            struct grehdr
+            {
+                __be16 flags;
+                __be16 protocol;
+            } *gre = data + sizeof(*eth) + sizeof(*ip);
+
+            if ((void *)(gre + 1) > data_end)
+                return XDP_PASS;
+
+            bpf_printk("GRE packet detected, protocol: 0x%x\n", __builtin_bswap16(gre->protocol));
+            break;
+        }
+        default:
+            return XDP_PASS;
+        }
 
         struct destination_info *dest_info = bpf_map_lookup_elem(&ipv4_destination_map, &dest_ip);
         if (dest_info)
